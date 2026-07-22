@@ -1,0 +1,423 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.43.8.12551",
+      "templateHash": "9824256227288649347"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[deployment().location]",
+      "metadata": {
+        "description": "Azure region for all resources."
+      }
+    },
+    "resourceGroupName": {
+      "type": "string",
+      "defaultValue": "rg-arjun",
+      "metadata": {
+        "description": "Resource group Arjun is installed into."
+      }
+    },
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "arjun",
+      "metadata": {
+        "description": "Prefix for resource names."
+      }
+    },
+    "containerImage": {
+      "type": "string",
+      "metadata": {
+        "description": "Container image to run, e.g. ghcr.io/abhijitsghosh/arjun:0.1.0"
+      }
+    },
+    "dbAdminUser": {
+      "type": "string",
+      "defaultValue": "arjunadmin",
+      "metadata": {
+        "description": "Postgres administrator login."
+      }
+    },
+    "dbAdminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Postgres administrator password."
+      }
+    },
+    "entraTenantId": {
+      "type": "string",
+      "defaultValue": "[subscription().tenantId]",
+      "metadata": {
+        "description": "Entra tenant the app signs users in from."
+      }
+    },
+    "entraClientId": {
+      "type": "string",
+      "metadata": {
+        "description": "Client id of the Entra app registration created by install.sh."
+      }
+    },
+    "entraClientSecret": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Client secret for that registration."
+      }
+    },
+    "resourceNameSuffix": {
+      "type": "string",
+      "defaultValue": "[utcNow('yyMMddHHmmss')]",
+      "metadata": {
+        "description": "Suffix for globally-unique names. Regenerated per install — see the upgrade note below."
+      }
+    }
+  },
+  "variables": {
+    "readerRoleId": "acdd72a7-3385-48ef-bd42-f606fba81ae7"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2024-11-01",
+      "name": "[parameters('resourceGroupName')]",
+      "location": "[parameters('location')]"
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(subscription().id, parameters('resourceGroupName'), parameters('namePrefix'), variables('readerRoleId'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('readerRoleId'))]",
+        "principalId": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.managedIdentityPrincipalId.value]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'arjun-resources')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "arjun-resources",
+      "resourceGroup": "[parameters('resourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "namePrefix": {
+            "value": "[parameters('namePrefix')]"
+          },
+          "containerImage": {
+            "value": "[parameters('containerImage')]"
+          },
+          "dbAdminUser": {
+            "value": "[parameters('dbAdminUser')]"
+          },
+          "dbAdminPassword": {
+            "value": "[parameters('dbAdminPassword')]"
+          },
+          "entraTenantId": {
+            "value": "[parameters('entraTenantId')]"
+          },
+          "entraClientId": {
+            "value": "[parameters('entraClientId')]"
+          },
+          "entraClientSecret": {
+            "value": "[parameters('entraClientSecret')]"
+          },
+          "resourceNameSuffix": {
+            "value": "[parameters('resourceNameSuffix')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.43.8.12551",
+              "templateHash": "2819709584555091422"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "namePrefix": {
+              "type": "string"
+            },
+            "containerImage": {
+              "type": "string"
+            },
+            "dbAdminUser": {
+              "type": "string"
+            },
+            "dbAdminPassword": {
+              "type": "securestring"
+            },
+            "entraTenantId": {
+              "type": "string"
+            },
+            "entraClientId": {
+              "type": "string"
+            },
+            "entraClientSecret": {
+              "type": "securestring"
+            },
+            "resourceNameSuffix": {
+              "type": "string",
+              "metadata": {
+                "description": "Suffix for globally-unique resource names."
+              }
+            }
+          },
+          "variables": {
+            "dbName": "arjun"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
+              "apiVersion": "2024-08-01",
+              "name": "[format('{0}/{1}', format('{0}-db-{1}', parameters('namePrefix'), parameters('resourceNameSuffix')), variables('dbName'))]",
+              "dependsOn": [
+                "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', format('{0}-db-{1}', parameters('namePrefix'), parameters('resourceNameSuffix')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules",
+              "apiVersion": "2024-08-01",
+              "name": "[format('{0}/{1}', format('{0}-db-{1}', parameters('namePrefix'), parameters('resourceNameSuffix')), 'AllowAzureServices')]",
+              "properties": {
+                "startIpAddress": "0.0.0.0",
+                "endIpAddress": "0.0.0.0"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', format('{0}-db-{1}', parameters('namePrefix'), parameters('resourceNameSuffix')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+              "apiVersion": "2023-01-31",
+              "name": "[format('{0}-identity', parameters('namePrefix'))]",
+              "location": "[parameters('location')]"
+            },
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2023-09-01",
+              "name": "[format('{0}-logs', parameters('namePrefix'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "sku": {
+                  "name": "PerGB2018"
+                },
+                "retentionInDays": 30
+              }
+            },
+            {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+              "apiVersion": "2024-08-01",
+              "name": "[format('{0}-db-{1}', parameters('namePrefix'), parameters('resourceNameSuffix'))]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard_B1ms",
+                "tier": "Burstable"
+              },
+              "properties": {
+                "version": "16",
+                "administratorLogin": "[parameters('dbAdminUser')]",
+                "administratorLoginPassword": "[parameters('dbAdminPassword')]",
+                "storage": {
+                  "storageSizeGB": 32
+                },
+                "backup": {
+                  "backupRetentionDays": 7,
+                  "geoRedundantBackup": "Disabled"
+                },
+                "highAvailability": {
+                  "mode": "Disabled"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.App/managedEnvironments",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}-env', parameters('namePrefix'))]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "appLogsConfiguration": {
+                  "destination": "log-analytics",
+                  "logAnalyticsConfiguration": {
+                    "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('namePrefix'))), '2023-09-01').customerId]",
+                    "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('namePrefix'))), '2023-09-01').primarySharedKey]"
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('namePrefix')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.App/containerApps",
+              "apiVersion": "2024-03-01",
+              "name": "[format('{0}-app', parameters('namePrefix'))]",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                  "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', parameters('namePrefix'))))]": {}
+                }
+              },
+              "properties": {
+                "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('{0}-env', parameters('namePrefix')))]",
+                "configuration": {
+                  "ingress": {
+                    "external": true,
+                    "targetPort": 8080,
+                    "transport": "auto"
+                  },
+                  "secrets": [
+                    {
+                      "name": "db-password",
+                      "value": "[parameters('dbAdminPassword')]"
+                    },
+                    {
+                      "name": "entra-client-secret",
+                      "value": "[parameters('entraClientSecret')]"
+                    }
+                  ]
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "arjun",
+                      "image": "[parameters('containerImage')]",
+                      "resources": {
+                        "cpu": "[json('1.0')]",
+                        "memory": "2Gi"
+                      },
+                      "env": [
+                        {
+                          "name": "ARJUN_DB_URL",
+                          "value": "[format('jdbc:postgresql://{0}:5432/{1}?sslmode=require', reference(resourceId('Microsoft.DBforPostgreSQL/flexibleServers', format('{0}-db-{1}', parameters('namePrefix'), parameters('resourceNameSuffix'))), '2024-08-01').fullyQualifiedDomainName, variables('dbName'))]"
+                        },
+                        {
+                          "name": "ARJUN_DB_USER",
+                          "value": "[parameters('dbAdminUser')]"
+                        },
+                        {
+                          "name": "ARJUN_DB_PASSWORD",
+                          "secretRef": "db-password"
+                        },
+                        {
+                          "name": "ARJUN_ENTRA_TENANT_ID",
+                          "value": "[parameters('entraTenantId')]"
+                        },
+                        {
+                          "name": "ARJUN_ENTRA_CLIENT_ID",
+                          "value": "[parameters('entraClientId')]"
+                        },
+                        {
+                          "name": "ARJUN_ENTRA_CLIENT_SECRET",
+                          "secretRef": "entra-client-secret"
+                        },
+                        {
+                          "name": "AZURE_CLIENT_ID",
+                          "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', parameters('namePrefix'))), '2023-01-31').clientId]"
+                        }
+                      ],
+                      "probes": [
+                        {
+                          "type": "Liveness",
+                          "httpGet": {
+                            "path": "/actuator/health/liveness",
+                            "port": 8080
+                          },
+                          "initialDelaySeconds": 30,
+                          "periodSeconds": 30
+                        },
+                        {
+                          "type": "Readiness",
+                          "httpGet": {
+                            "path": "/actuator/health/readiness",
+                            "port": 8080
+                          },
+                          "initialDelaySeconds": 10,
+                          "periodSeconds": 10
+                        }
+                      ]
+                    }
+                  ],
+                  "scale": {
+                    "minReplicas": 1,
+                    "maxReplicas": 1
+                  }
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/managedEnvironments', format('{0}-env', parameters('namePrefix')))]",
+                "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', format('{0}-db-{1}', parameters('namePrefix'), parameters('resourceNameSuffix')))]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', parameters('namePrefix')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "appFqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', format('{0}-app', parameters('namePrefix'))), '2024-03-01').configuration.ingress.fqdn]"
+            },
+            "appUrl": {
+              "type": "string",
+              "value": "[format('https://{0}', format('{0}-app.{1}', parameters('namePrefix'), reference(resourceId('Microsoft.App/managedEnvironments', format('{0}-env', parameters('namePrefix'))), '2024-03-01').defaultDomain))]"
+            },
+            "managedIdentityClientId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', parameters('namePrefix'))), '2023-01-31').clientId]"
+            },
+            "managedIdentityPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', parameters('namePrefix'))), '2023-01-31').principalId]"
+            },
+            "databaseFqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.DBforPostgreSQL/flexibleServers', format('{0}-db-{1}', parameters('namePrefix'), parameters('resourceNameSuffix'))), '2024-08-01').fullyQualifiedDomainName]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "appFqdn": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.appFqdn.value]"
+    },
+    "appUrl": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.appUrl.value]"
+    },
+    "managedIdentityPrincipalId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.managedIdentityPrincipalId.value]"
+    },
+    "databaseFqdn": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.databaseFqdn.value]"
+    },
+    "resourceGroupName": {
+      "type": "string",
+      "value": "[parameters('resourceGroupName')]"
+    }
+  }
+}
