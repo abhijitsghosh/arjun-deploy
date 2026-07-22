@@ -1,26 +1,19 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
   "metadata": {
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "9824256227288649347"
+      "templateHash": "17150520029922957270"
     }
   },
   "parameters": {
     "location": {
       "type": "string",
-      "defaultValue": "[deployment().location]",
+      "defaultValue": "[resourceGroup().location]",
       "metadata": {
-        "description": "Azure region for all resources."
-      }
-    },
-    "resourceGroupName": {
-      "type": "string",
-      "defaultValue": "rg-arjun",
-      "metadata": {
-        "description": "Resource group Arjun is installed into."
+        "description": "Azure region for all resources. Defaults to the resource group location."
       }
     },
     "namePrefix": {
@@ -72,38 +65,15 @@
       "type": "string",
       "defaultValue": "[utcNow('yyMMddHHmmss')]",
       "metadata": {
-        "description": "Suffix for globally-unique names. Regenerated per install — see the upgrade note below."
+        "description": "Suffix for globally-unique names. Regenerated per install — see the upgrade note."
       }
     }
   },
-  "variables": {
-    "readerRoleId": "acdd72a7-3385-48ef-bd42-f606fba81ae7"
-  },
   "resources": [
-    {
-      "type": "Microsoft.Resources/resourceGroups",
-      "apiVersion": "2024-11-01",
-      "name": "[parameters('resourceGroupName')]",
-      "location": "[parameters('location')]"
-    },
-    {
-      "type": "Microsoft.Authorization/roleAssignments",
-      "apiVersion": "2022-04-01",
-      "name": "[guid(subscription().id, parameters('resourceGroupName'), parameters('namePrefix'), variables('readerRoleId'))]",
-      "properties": {
-        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('readerRoleId'))]",
-        "principalId": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.managedIdentityPrincipalId.value]",
-        "principalType": "ServicePrincipal"
-      },
-      "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'arjun-resources')]"
-      ]
-    },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "arjun-resources",
-      "resourceGroup": "[parameters('resourceGroupName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -392,32 +362,25 @@
             }
           }
         }
-      },
-      "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]"
-      ]
+      }
     }
   ],
   "outputs": {
     "appFqdn": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.appFqdn.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.appFqdn.value]"
     },
     "appUrl": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.appUrl.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.appUrl.value]"
     },
     "managedIdentityPrincipalId": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.managedIdentityPrincipalId.value]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.managedIdentityPrincipalId.value]"
     },
     "databaseFqdn": {
       "type": "string",
-      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.databaseFqdn.value]"
-    },
-    "resourceGroupName": {
-      "type": "string",
-      "value": "[parameters('resourceGroupName')]"
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'arjun-resources'), '2025-04-01').outputs.databaseFqdn.value]"
     }
   }
 }

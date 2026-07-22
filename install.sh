@@ -13,37 +13,44 @@
 # supported inside deployment stacks. Only the platform is deployed as an ARM stack.
 #
 # What this installs, and what it can do:
-#   * A single-replica Container App running Arjun, signed in to with Entra.
-#   * A managed Postgres holding your attestations.
-#   * An identity granted **Reader** on this subscription — nothing more. Arjun
-#     reads configuration to assess it and never writes to your tenant.
+#   * Everything goes into ONE resource group (default rg-arjun) you can inspect
+#     or delete as a unit: a single-replica Container App running Arjun, and a
+#     managed Postgres holding your attestations.
+#   * The app's identity is granted **Reader** on the subscription — nothing more.
+#     Arjun reads configuration to assess it and never writes to your tenant.
 #
 # Prerequisites in the target subscription/tenant:
-#   * Owner or User Access Administrator on the subscription (the deploy creates
-#     the Reader role assignment)
+#   * Contributor on the resource group (or the rights to create it) — the deploy
+#     itself is resource-group scoped.
+#   * Owner or User Access Administrator on the subscription — ONLY for the final
+#     Reader grant that lets Arjun assess. If you lack it, the install completes
+#     and tells you the one command an admin runs to enable assessment.
 #   * Application Administrator (or Global Administrator) to create the sign-in
-#     app registration
+#     app registration.
 #
 set -euo pipefail
 
-# Placeholder host: this repository. Swap for a public deploy repo (or arjun.run)
-# before customers use the one-liner — see README "Distribution".
+# Distribution host: the public arjun-deploy repo (stand-in for arjun.run).
 BASE="https://raw.githubusercontent.com/abhijitsghosh/arjun-deploy/main"
 GRAPH="https://graph.microsoft.com/v1.0"
-REGION=""; IMAGE_TAG="latest"; DB_PASSWORD=""; SUBSCRIPTION=""
+REGION=""; IMAGE_TAG="latest"; DB_PASSWORD=""; SUBSCRIPTION=""; RG="rg-arjun"
 
 usage() {
-  echo "Usage: install.sh --region <azure-region> [--image-tag <ver>] [--subscription <id>] [--db-password <pw>]"
+  echo "Usage: install.sh --region <azure-region> [--resource-group <name>] [--image-tag <ver>] [--subscription <id>] [--db-password <pw>]"
+  echo
+  echo "  Everything installs into --resource-group (default rg-arjun), so the whole"
+  echo "  footprint is one group you can inspect or delete as a unit."
   exit 1
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -r|--region)       REGION="${2:-}"; shift 2;;
-    -t|--image-tag)    IMAGE_TAG="${2:-}"; shift 2;;
-    -p|--db-password)  DB_PASSWORD="${2:-}"; shift 2;;
-    -s|--subscription) SUBSCRIPTION="${2:-}"; shift 2;;
-    -h|--help)         usage;;
+    -r|--region)         REGION="${2:-}"; shift 2;;
+    -g|--resource-group) RG="${2:-}"; shift 2;;
+    -t|--image-tag)      IMAGE_TAG="${2:-}"; shift 2;;
+    -p|--db-password)    DB_PASSWORD="${2:-}"; shift 2;;
+    -s|--subscription)   SUBSCRIPTION="${2:-}"; shift 2;;
+    -h|--help)           usage;;
     *) echo "Unknown option: $1"; usage;;
   esac
 done
@@ -55,7 +62,9 @@ az account show >/dev/null 2>&1 || { echo "ERROR: not signed in. Run 'az login' 
 [[ -n "$SUBSCRIPTION" ]] && az account set --subscription "$SUBSCRIPTION"
 
 TENANT=$(az account show --query tenantId -o tsv)
-echo "▶ Installing Arjun into subscription: $(az account show --query name -o tsv) (region $REGION)"
+SUB_ID=$(az account show --query id -o tsv)
+echo "▶ Installing Arjun into subscription: $(az account show --query name -o tsv)"
+echo "  region: $REGION   resource group: $RG"
 [[ -z "$DB_PASSWORD" ]] && DB_PASSWORD="Aj$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 22)9!"
 
 # ---------- [1/3] Entra app registration (via Microsoft Graph) ----------
@@ -105,34 +114,55 @@ CLIENT_SECRET=$(az rest --method POST --url "$GRAPH/applications/$APP_OBJ/addPas
   --body "{\"passwordCredential\":{\"displayName\":\"arjun-install-$(date +%Y%m%d%H%M%S)\"}}" \
   --query secretText -o tsv)
 
-# ---------- [2/3] Platform (ARM deployment stack) ----------
-echo "▶ [2/3] Deploying the platform — 10–15 min (the database is the slow part)…"
-az stack sub create --name arjun --location "$REGION" \
+# ---------- [2/4] Resource group + platform (RG-scoped deployment stack) ----------
+# The whole footprint installs into one resource group. Deploying at group scope
+# means this step needs Contributor on the group, not Owner on the subscription.
+echo "▶ [2/4] Creating resource group '$RG'…"
+az group create --name "$RG" --location "$REGION" --only-show-errors -o none
+
+echo "▶ [3/4] Deploying the platform — 10–15 min (the database is the slow part)…"
+az stack group create --name arjun --resource-group "$RG" \
   --template-uri "$BASE/azuredeploy.json" \
   --parameters containerImage="ghcr.io/abhijitsghosh/arjun:$IMAGE_TAG" \
                dbAdminPassword="$DB_PASSWORD" \
                entraClientId="$APP_ID" \
                entraClientSecret="$CLIENT_SECRET" \
   --action-on-unmanage deleteAll --deny-settings-mode none --yes --only-show-errors -o none
-APP_URL=$(az stack sub show --name arjun --query "outputs.appUrl.value" -o tsv)
-MI_PRINCIPAL=$(az stack sub show --name arjun --query "outputs.managedIdentityPrincipalId.value" -o tsv)
+APP_URL=$(az stack group show --name arjun --resource-group "$RG" --query "outputs.appUrl.value" -o tsv)
+MI_PRINCIPAL=$(az stack group show --name arjun --resource-group "$RG" --query "outputs.managedIdentityPrincipalId.value" -o tsv)
 echo "    app url: $APP_URL"
 
-# ---------- [3/3] Redirect URI ----------
-# Only known once the app has a hostname, so it is registered after the deploy.
-# Spring's OAuth2 client uses /login/oauth2/code/{registrationId}.
-echo "▶ [3/3] Registering the sign-in redirect URL…"
+# ---------- [4/4] Redirect URI + Reader for assessment ----------
+# Redirect URI: only known once the app has a hostname. Spring's OAuth2 client
+# uses /login/oauth2/code/{registrationId}.
+echo "▶ [4/4] Registering the sign-in redirect URL + granting read access to assess…"
 az rest --method PATCH --url "$GRAPH/applications/$APP_OBJ" \
   --headers "Content-Type=application/json" \
   --body "{\"web\":{\"redirectUris\":[\"$APP_URL/login/oauth2/code/entra\"]}}" --only-show-errors -o none
 
+# Reader on the subscription so Arjun can assess it. This is a SEPARATE grant from
+# the deployment (which lives entirely in the resource group) — it needs Owner or
+# User Access Administrator on the subscription. If you lack that, this step warns
+# and continues; an admin can grant it later, or you can scope it to just the
+# resource groups Arjun should assess:
+#   az role assignment create --assignee-object-id $MI_PRINCIPAL \
+#     --assignee-principal-type ServicePrincipal --role Reader \
+#     --scope /subscriptions/$SUB_ID/resourceGroups/<rg-to-assess>
+if az role assignment create --assignee-object-id "$MI_PRINCIPAL" \
+     --assignee-principal-type ServicePrincipal --role Reader \
+     --scope "/subscriptions/$SUB_ID" --only-show-errors -o none 2>/dev/null; then
+  READER_OK=1
+else
+  READER_OK=0
+fi
+
 # Recycle so the app picks up the registered redirect URI cleanly.
-REV=$(az containerapp revision list -g rg-arjun -n arjun-app --query "[?properties.active].name | [0]" -o tsv 2>/dev/null || true)
-[[ -n "${REV:-}" ]] && az containerapp revision restart -g rg-arjun -n arjun-app --revision "$REV" --only-show-errors -o none 2>/dev/null || true
+REV=$(az containerapp revision list -g "$RG" -n arjun-app --query "[?properties.active].name | [0]" -o tsv 2>/dev/null || true)
+[[ -n "${REV:-}" ]] && az containerapp revision restart -g "$RG" -n arjun-app --revision "$REV" --only-show-errors -o none 2>/dev/null || true
 
 cat <<EOF
 
-✅ Arjun is installed.
+✅ Arjun is installed — everything is in resource group '$RG'.
 
    Open:   $APP_URL
    Sign in with your work account (one consent prompt).
@@ -141,11 +171,27 @@ cat <<EOF
 
    Arjun holds Reader on this subscription and nothing more. It reads your
    configuration to assess it; it never changes anything in your tenant.
+EOF
+
+if [[ "$READER_OK" -ne 1 ]]; then
+  cat <<EOF
+
+⚠ Could not grant Reader on the subscription (you may lack Owner / User Access
+   Administrator). Arjun is installed but cannot assess until an admin runs:
+     az role assignment create --assignee-object-id $MI_PRINCIPAL \\
+       --assignee-principal-type ServicePrincipal --role Reader \\
+       --scope /subscriptions/$SUB_ID
+EOF
+fi
+
+cat <<EOF
 
    Upgrade later (image-only, your attestations are preserved):
-     curl -sL https://raw.githubusercontent.com/abhijitsghosh/arjun-deploy/main/upgrade.sh | bash
+     curl -sL https://raw.githubusercontent.com/abhijitsghosh/arjun-deploy/main/upgrade.sh | bash -s -- --resource-group $RG
 
-   Tear down later:
-     az stack sub delete --name arjun --action-on-unmanage deleteAll --yes
+   Tear down later (removes the whole group in one go):
+     az stack group delete --name arjun --resource-group $RG --action-on-unmanage deleteAll --yes
+     az group delete --name $RG --yes
+     az role assignment delete --assignee $MI_PRINCIPAL --scope /subscriptions/$SUB_ID --role Reader
      az ad app delete --id $APP_ID
 EOF
