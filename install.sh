@@ -72,15 +72,17 @@ echo "  region: $REGION   resource group: $RG"
 # server exchanges the code using a client secret. So this needs a *web* redirect
 # URI and a secret — unlike a SPA, which uses neither.
 echo "▶ [1/3] Creating the sign-in app registration…"
-ID_URI="api://arjun-${TENANT}"   # stable identifier → idempotent on re-run
-APP_ID=$(az ad app list --identifier-uri "$ID_URI" --query "[0].appId" -o tsv 2>/dev/null || true)
+# Arjun is a confidential OIDC client — it signs users in, it does not expose an
+# API — so it needs no identifier URI (api://…). Adding one also trips tenants
+# whose policy restricts identifier-URI formats. Idempotency on re-run keys off
+# the display name instead.
+APP_ID=$(az ad app list --display-name "Arjun" --query "[0].appId" -o tsv 2>/dev/null || true)
 if [[ -z "${APP_ID:-}" || "$APP_ID" == "null" ]]; then
   MANIFEST=$(mktemp)
   cat > "$MANIFEST" <<JSON
 {
   "displayName": "Arjun",
   "signInAudience": "AzureADMyOrg",
-  "identifierUris": ["$ID_URI"],
   "web": { "redirectUris": [] },
   "requiredResourceAccess": [{
     "resourceAppId": "00000003-0000-0000-c000-000000000000",
