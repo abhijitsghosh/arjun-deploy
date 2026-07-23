@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "17150520029922957270"
+      "templateHash": "10588747926780097018"
     }
   },
   "parameters": {
@@ -115,7 +115,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.43.8.12551",
-              "templateHash": "2819709584555091422"
+              "templateHash": "12234087633440955036"
             }
           },
           "parameters": {
@@ -302,6 +302,10 @@
                         {
                           "name": "AZURE_CLIENT_ID",
                           "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-identity', parameters('namePrefix'))), '2023-01-31').clientId]"
+                        },
+                        {
+                          "name": "ARJUN_SELF_RESOURCE_GROUP",
+                          "value": "[resourceGroup().name]"
                         }
                       ],
                       "probes": [
