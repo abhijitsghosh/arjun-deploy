@@ -1,0 +1,217 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Arjun — ISM compliance assessment, deployed into the customer's own AWS account.
+  Parallel to the Azure stack: an App Runner service, an RDS Postgres for attestations,
+  and a task role granted ReadOnlyAccess and nothing more. Arjun reads configuration to
+  assess it and never writes to the account.
+
+  App Runner rather than ECS+ALB deliberately: it provides a managed HTTPS endpoint with
+  no certificate or domain of your own, and Cognito will not accept a plain-HTTP callback
+  URL. That single constraint decides the compute choice.
+
+Parameters:
+  ContainerImage:
+    Type: String
+    Description: >
+      Image URI. App Runner pulls only from ECR or ECR Public - not GHCR - so this is either a
+      public.ecr.aws URI or an image mirrored into this account's ECR.
+  ImageRepositoryType:
+    Type: String
+    Default: ECR_PUBLIC
+    AllowedValues: [ECR, ECR_PUBLIC]
+    Description: Where the image lives. ECR_PUBLIC needs no access role.
+  DbPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 12
+    Description: Postgres administrator password.
+  DbInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+  NamePrefix:
+    Type: String
+    Default: arjun
+
+Conditions:
+  PrivateEcr: !Equals [!Ref ImageRepositoryType, ECR]
+
+Resources:
+
+  # ---- Networking -----------------------------------------------------------------
+  # The database is not publicly reachable; App Runner reaches it through a VPC connector.
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.42.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags: [{ Key: Name, Value: !Sub '${NamePrefix}-vpc' }]
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Arjun database subnets
+      SubnetIds: [!Ref SubnetA, !Ref SubnetB]
+
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Arjun App Runner VPC connector
+      VpcId: !Ref Vpc
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Arjun database - reachable only from the app
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref AppSecurityGroup
+
+  # ---- Database -------------------------------------------------------------------
+  # Attestations live here — the one thing a customer cannot regenerate.
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      DBInstanceIdentifier: !Sub '${NamePrefix}-db'
+      Engine: postgres
+      EngineVersion: '16.9'
+      DBInstanceClass: !Ref DbInstanceClass
+      AllocatedStorage: '20'
+      StorageType: gp3
+      DBName: arjun
+      MasterUsername: arjunadmin
+      MasterUserPassword: !Ref DbPassword
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups: [!GetAtt DbSecurityGroup.GroupId]
+      PubliclyAccessible: false
+      BackupRetentionPeriod: 7
+      MultiAZ: false
+
+  # ---- Sign-in (Cognito, an OIDC provider) ----------------------------------------
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${NamePrefix}-users'
+      AutoVerifiedAttributes: [email]
+      UsernameAttributes: [email]
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true   # operators are invited, not self-registered
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      Domain: !Sub '${NamePrefix}-${AWS::AccountId}'
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: arjun
+      GenerateSecret: true               # Arjun is a confidential client
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, profile, email]
+      AllowedOAuthFlowsUserPoolClient: true
+      SupportedIdentityProviders: [COGNITO]
+      # The callback cannot be known until App Runner exists; install.sh sets it afterwards,
+      # exactly as the Azure installer patches the Entra redirect URI.
+      CallbackURLs: ['https://localhost/login/oauth2/code/oidc']
+
+  # ---- Read-only access to assess --------------------------------------------------
+  # The AWS equivalent of Reader. Arjun issues only describe/list calls.
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: tasks.apprunner.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+
+  AccessRole:
+    Type: AWS::IAM::Role
+    Condition: PrivateEcr
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: build.apprunner.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+
+  VpcConnector:
+    Type: AWS::AppRunner::VpcConnector
+    Properties:
+      VpcConnectorName: !Sub '${NamePrefix}-connector'
+      Subnets: [!Ref SubnetA, !Ref SubnetB]
+      SecurityGroups: [!GetAtt AppSecurityGroup.GroupId]
+
+  Service:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: !Sub '${NamePrefix}-app'
+      SourceConfiguration:
+        # A private-ECR pull needs an access role; ECR Public does not.
+        AuthenticationConfiguration:
+          AccessRoleArn: !If [PrivateEcr, !GetAtt AccessRole.Arn, !Ref 'AWS::NoValue']
+        AutoDeploymentsEnabled: false
+        ImageRepository:
+          ImageIdentifier: !Ref ContainerImage
+          ImageRepositoryType: !Ref ImageRepositoryType
+          ImageConfiguration:
+            Port: '8080'
+            RuntimeEnvironmentVariables:
+              - { Name: ARJUN_DB_URL, Value: !Sub 'jdbc:postgresql://${Database.Endpoint.Address}:5432/arjun' }
+              - { Name: ARJUN_DB_USER, Value: arjunadmin }
+              - { Name: ARJUN_DB_PASSWORD, Value: !Ref DbPassword }
+              - { Name: ARJUN_OIDC_ISSUER, Value: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}' }
+              - { Name: ARJUN_OIDC_CLIENT_ID, Value: !Ref UserPoolClient }
+              - { Name: AWS_REGION, Value: !Ref 'AWS::Region' }
+      InstanceConfiguration:
+        Cpu: 1 vCPU
+        Memory: 2 GB
+        InstanceRoleArn: !GetAtt InstanceRole.Arn
+      NetworkConfiguration:
+        EgressConfiguration:
+          EgressType: VPC
+          VpcConnectorArn: !GetAtt VpcConnector.VpcConnectorArn
+      HealthCheckConfiguration:
+        Protocol: HTTP
+        Path: /actuator/health
+        Interval: 20
+        Timeout: 5
+
+Outputs:
+  AppUrl:
+    Description: Arjun URL
+    Value: !Sub 'https://${Service.ServiceUrl}'
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  CognitoDomain:
+    Value: !Sub 'https://${NamePrefix}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com'
+  DatabaseEndpoint:
+    Value: !GetAtt Database.Endpoint.Address
