@@ -26,7 +26,7 @@ set -euo pipefail
 STACK="arjun"
 REGION=""; IMAGE=""; IMAGE_TYPE="ECR_PUBLIC"; DB_PASSWORD=""; ADMIN_EMAIL=""
 # Published image. App Runner cannot pull from GHCR, so AWS installs use ECR Public.
-DEFAULT_IMAGE="public.ecr.aws/abhijitsghosh/arjun:latest"
+DEFAULT_IMAGE="public.ecr.aws/w4o8p5x9/arjun:latest"
 
 usage() {
   echo "Usage: install-aws.sh --region <aws-region> [--stack <name>] [--image <uri>] [--image-type ECR|ECR_PUBLIC] [--admin-email <you@agency.gov.au>] [--db-password <pw>]"
