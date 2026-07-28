@@ -47,6 +47,10 @@ Resources:
       EnableDnsSupport: true
       Tags: [{ Key: Name, Value: !Sub '${NamePrefix}-vpc' }]
 
+  # SubnetA/SubnetB are private: they hold the database and the App Runner VPC connector.
+  # App Runner routes ALL of the service's outbound traffic through this VPC, so these subnets
+  # need a path to the internet — otherwise the app cannot reach Cognito's public OIDC endpoint
+  # at startup and the health check fails. That egress is via the NAT gateway below.
   SubnetA:
     Type: AWS::EC2::Subnet
     Properties:
@@ -59,6 +63,79 @@ Resources:
       VpcId: !Ref Vpc
       CidrBlock: 10.42.2.0/24
       AvailabilityZone: !Select [1, !GetAZs '']
+
+  # A public subnet to host the NAT gateway (a NAT gateway must live in a subnet with a direct
+  # route to an internet gateway). Nothing else runs here.
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags: [{ Key: Name, Value: !Sub '${NamePrefix}-igw' }]
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  PublicSubnetRouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+  # A single NAT gateway gives the private subnets outbound internet without making anything in
+  # them reachable from outside. One NAT (not one per AZ) keeps cost down; cross-AZ egress is a
+  # negligible data charge for this workload.
+  NatEip:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEip.AllocationId
+      SubnetId: !Ref PublicSubnet
+      Tags: [{ Key: Name, Value: !Sub '${NamePrefix}-nat' }]
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+  PrivateDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+  PrivateSubnetARouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref SubnetA
+  PrivateSubnetBRouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref SubnetB
 
   DbSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -188,6 +265,10 @@ Resources:
               - { Name: ARJUN_DB_PASSWORD, Value: !Ref DbPassword }
               - { Name: ARJUN_OIDC_ISSUER, Value: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}' }
               - { Name: ARJUN_OIDC_CLIENT_ID, Value: !Ref UserPoolClient }
+              # The Cognito app client is confidential (GenerateSecret: true), so the server-side
+              # authorization-code→token exchange must authenticate with the client secret. Without
+              # it, sign-in fails at the token step even though the login page and password are fine.
+              - { Name: ARJUN_OIDC_CLIENT_SECRET, Value: !GetAtt UserPoolClient.ClientSecret }
               - { Name: AWS_REGION, Value: !Ref 'AWS::Region' }
       InstanceConfiguration:
         Cpu: 1 vCPU
