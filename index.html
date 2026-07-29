@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arjun &mdash; ISM assessment &amp; IRAP evidence, in your own tenant</title>
+<meta name="description" content="Arjun is a read-only ISM assessment tool that installs into your own Azure or AWS tenant. Answer the ISM, attest, and generate a System Security Plan and its Annex. Honour-system pricing.">
+<meta property="og:title" content="Arjun">
+<meta property="og:description" content="Read-only ISM assessment &amp; IRAP evidence, in your own tenant.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://arjunsec.run">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23000'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='18' font-weight='700' text-anchor='middle' fill='%2300e5a0'%3E&gt;_%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+<style>
+  /* ============ Arjun &middot; arjunsec.run &mdash; phosphor terminal landing ============
+     Single committed look: a dark security console in Arjun's phosphor green,
+     sibling to the app UI a customer lands in after install. */
+  :root {
+    --void:    #000000;
+    --panel:   rgba(2, 18, 13, 0.62);
+    --panel-2: rgba(0, 11, 8, 0.80);
+    --rain:    #00e5a0;
+    --bright:  #b8ffe8;   /* leading glyph / headline highlight */
+    --green:   #2fd39a;   /* accent */
+    --text:    #86e6c4;   /* readable body green */
+    --dim:     #4a7d6a;   /* muted labels */
+    --edge:    rgba(0, 229, 160, 0.22);
+    --edge-hi: rgba(0, 229, 160, 0.55);
+    --glow:    0 0 10px rgba(0, 229, 160, 0.45);
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Fira Code",
+            "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  :root[data-theme="light"], :root[data-theme="dark"] { color-scheme: dark; }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; max-width: 100%; overflow-x: hidden; }
+  body {
+    background: var(--void); color: var(--text);
+    font-family: var(--mono); line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+
+  #rain { position: fixed; inset: 0; z-index: 0; display: block; }
+  .vignette, .scan { position: fixed; inset: 0; pointer-events: none; }
+  .vignette { z-index: 2;
+    background: radial-gradient(ellipse 120% 90% at 50% 30%,
+      rgba(0,0,0,0) 45%, rgba(0,0,0,0.55) 78%, rgba(0,0,0,0.9) 100%); }
+  .scan { z-index: 3; mix-blend-mode: overlay; opacity: 0.5;
+    background: repeating-linear-gradient(0deg,
+      rgba(0,0,0,0) 0 2px, rgba(0,0,0,0.55) 2px 3px); }
+
+  main { position: relative; z-index: 1; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+  section { padding: clamp(48px, 8vw, 96px) 0; }
+  .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  .prompt { color: var(--dim); }
+  .prompt b { color: var(--green); font-weight: 600; }
+
+  .hero { padding-top: clamp(64px, 12vh, 140px); text-align: center; }
+  .boot { display: inline-block; margin: 0 auto 26px; padding: 7px 14px;
+    border: 1px solid var(--edge); background: var(--panel-2); border-radius: 4px;
+    font-size: 13px; color: var(--text); }
+  .boot .cursor { display:inline-block; width:8px; background: var(--rain);
+    color: transparent; animation: blink 1.05s steps(1) infinite; margin-left: 2px; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .wordmark { margin: 0; font-weight: 800;
+    font-size: clamp(58px, 15vw, 168px); line-height: 0.9;
+    letter-spacing: clamp(2px, 1.5vw, 20px); color: var(--bright);
+    text-shadow: 0 0 18px rgba(0,229,160,0.55), 0 0 46px rgba(0,229,160,0.28);
+    text-wrap: balance; }
+  .tagline { margin: 26px auto 8px; max-width: 42ch;
+    font-size: clamp(17px, 2.4vw, 23px); color: var(--bright); text-wrap: balance; }
+  .subline { color: var(--dim); font-size: 14px; letter-spacing: 0.16em;
+    text-transform: uppercase; }
+
+  .term { margin: 22px auto 0; max-width: 780px;
+    border: 1px solid var(--edge-hi); border-radius: 8px;
+    background: var(--panel-2); box-shadow: var(--glow); text-align: left; overflow: hidden; }
+  .term-bar { display: flex; align-items: center; gap: 8px; padding: 9px 13px;
+    border-bottom: 1px solid var(--edge); font-size: 11px; color: var(--dim); letter-spacing: 0.12em; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--edge-hi); }
+  .dot.g { background: rgba(0,229,160,0.55); }
+  .term-bar .lbl { text-transform: uppercase; }
+  .term-bar a { margin-left: auto; text-transform: uppercase; color: var(--green);
+    text-decoration: none; white-space: nowrap; }
+  .term-bar a:hover { color: var(--bright); text-decoration: underline; }
+  .term-body { display: flex; align-items: center; gap: 12px; padding: 16px; overflow-x: auto; }
+  .term-body code { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere;
+    font-size: clamp(12px, 1.9vw, 15px); color: var(--text); }
+  .term-body code b { color: var(--bright); }
+  .copy { flex-shrink: 0; cursor: pointer; font-family: var(--mono); font-size: 12px;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--void); background: var(--rain);
+    border: 0; padding: 7px 12px; border-radius: 4px; font-weight: 700;
+    transition: filter .15s, transform .05s; }
+  .copy:hover { filter: brightness(1.15); }
+  .copy:active { transform: translateY(1px); }
+  .hint { margin: 16px auto 0; color: var(--text); font-size: 13.5px; text-align: center;
+    max-width: 66ch; }
+  .hint a { color: var(--green); text-decoration: underline; }
+  .hint a:hover { color: var(--bright); }
+
+  .shead { margin: 0 0 6px; font-size: 13px; letter-spacing: 0.24em;
+    text-transform: uppercase; color: var(--green); }
+  .stitle { margin: 0 0 34px; font-size: clamp(24px, 4vw, 36px);
+    color: var(--bright); font-weight: 700; text-wrap: balance; }
+
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); }
+  .card { border: 1px solid var(--edge); border-radius: 8px; background: var(--panel);
+    padding: 20px 20px 22px; transition: border-color .18s, transform .18s, box-shadow .18s; }
+  .card:hover { border-color: var(--edge-hi); transform: translateY(-3px); box-shadow: var(--glow); }
+  .card h3 { margin: 0 0 8px; font-size: 16px; color: var(--bright); font-weight: 700;
+    display: flex; align-items: baseline; gap: 9px; }
+  .card h3::before { content: ">"; color: var(--green); font-weight: 700; text-shadow: var(--glow); }
+  .card p { margin: 0; font-size: 14px; color: var(--text); }
+
+  .band { border-top: 1px solid var(--edge); border-bottom: 1px solid var(--edge);
+    background: rgba(0, 13, 9, 0.5); }
+  .band .grid { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .runitem h3 { color: var(--rain); text-shadow: var(--glow); }
+  .runitem h3::before { content: "//"; }
+
+  .audit { margin: 30px auto 0; max-width: 820px; padding: 16px 24px;
+    border: 1px solid var(--edge-hi); border-radius: 8px; background: rgba(0,229,160,0.06);
+    box-shadow: var(--glow); text-align: center; color: var(--text);
+    font-size: 14.5px; line-height: 1.65; }
+  .audit strong { color: var(--bright); }
+  .audit a { color: var(--green); text-decoration: underline; }
+  .audit a:hover { color: var(--bright); }
+
+  .price { border: 1px solid var(--edge-hi); border-radius: 10px; background: var(--panel-2);
+    padding: clamp(28px, 5vw, 44px); text-align: center; box-shadow: var(--glow); }
+  .price .fig { font-size: clamp(40px, 9vw, 68px); font-weight: 800; color: var(--bright);
+    text-shadow: var(--glow); letter-spacing: 1px; }
+  .price .fig small { font-size: 0.30em; color: var(--dim); font-weight: 500; letter-spacing: 0.08em; }
+  .price p { max-width: 58ch; margin: 14px auto 0; color: var(--text); }
+  .btn { display: inline-flex; align-items: center; gap: 9px; margin-top: 24px; padding: 12px 22px;
+    border-radius: 6px; text-decoration: none; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; font-size: 13px; color: var(--void); background: var(--rain);
+    box-shadow: var(--glow); transition: filter .15s, transform .05s; }
+  .btn:hover { filter: brightness(1.12); }
+  .btn:active { transform: translateY(1px); }
+
+  .fine { margin-top: 40px; border: 1px dashed var(--edge); border-radius: 8px;
+    background: rgba(0,0,0,0.4); padding: 16px 20px; color: var(--dim);
+    font-size: 12.5px; line-height: 1.7; text-align: center; }
+  .fine b { color: var(--text); font-weight: 600; }
+  footer { border-top: 1px solid var(--edge); padding: 30px 0 44px; text-align: center;
+    color: var(--dim); font-size: 12px; letter-spacing: 0.12em; }
+  footer .sig { color: var(--green); }
+
+  a { color: var(--green); }
+  a:focus-visible, .copy:focus-visible, .btn:focus-visible {
+    outline: 2px solid var(--bright); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { .boot .cursor { animation: none; } }
+  @media (max-width: 560px) { .term-body { flex-direction: column; align-items: stretch; }
+    .copy { align-self: flex-end; } }
+</style>
+
+<canvas id="rain" aria-hidden="true"></canvas>
+<div class="vignette" aria-hidden="true"></div>
+<div class="scan" aria-hidden="true"></div>
+
+<main>
+  <p class="sr-only">Arjun is a read-only ISM assessment tool that installs into your own Azure or AWS tenant and generates a System Security Plan and its Annex.</p>
+
+  <!-- HERO -->
+  <section class="hero wrap">
+    <div class="boot">
+      <span class="prompt">&gt;_ <b>arjun</b>@your-tenant:~$</span> ./assess.sh<span class="cursor">_</span>
+    </div>
+    <h1 class="wordmark">ARJUN</h1>
+    <p class="tagline">ISM assessment &amp; IRAP evidence &mdash; in your own tenant.</p>
+    <p class="subline">read-only &middot; no egress &middot; yours to run</p>
+
+    <div class="term" role="group" aria-label="Azure install command">
+      <div class="term-bar">
+        <i class="dot g"></i><i class="dot"></i><i class="dot"></i>
+        <span class="lbl">azure</span>
+        <a href="https://shell.azure.com" target="_blank" rel="noreferrer">azure cloud shell &#8599;</a>
+      </div>
+      <div class="term-body">
+        <code>$ curl -sL <b>https://arjunsec.run/install.sh</b> | bash -s -- --region australiaeast</code>
+        <button class="copy" data-copy="curl -sL https://arjunsec.run/install.sh | bash -s -- --region australiaeast">Copy</button>
+      </div>
+    </div>
+
+    <div class="term" role="group" aria-label="AWS install command" style="margin-top:14px">
+      <div class="term-bar">
+        <i class="dot g"></i><i class="dot"></i><i class="dot"></i>
+        <span class="lbl">aws</span>
+        <a href="https://console.aws.amazon.com/cloudshell" target="_blank" rel="noreferrer">aws cloudshell &#8599;</a>
+      </div>
+      <div class="term-body">
+        <code>$ curl -sL <b>https://arjunsec.run/install-aws.sh</b> | bash -s -- --region ap-southeast-2</code>
+        <button class="copy" data-copy="curl -sL https://arjunsec.run/install-aws.sh | bash -s -- --region ap-southeast-2">Copy</button>
+      </div>
+    </div>
+
+    <p class="hint">Copy a line and paste it into your cloud's browser shell &mdash; it runs the same from Windows, macOS or Linux. One command lands the whole app in a single resource group / stack you can delete as a unit.</p>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="wrap">
+    <p class="shead">// what it does</p>
+    <h2 class="stitle">The whole ISM, answerable &mdash; and the documents to prove it.</h2>
+    <div class="grid">
+      <div class="card"><h3>full ISM coverage</h3><p>Every control applicable at your classification becomes an answerable question &mdash; all ~1,000, not a curated subset. Nothing is left as a silent gap.</p></div>
+      <div class="card"><h3>attestations</h3><p>Record each control's implementation status with a justification and supporting-evidence references. Re-checked for currency against every ISM release.</p></div>
+      <div class="card"><h3>ssp + annex</h3><p>Generate a formatted System Security Plan and its control-implementation Annex as real Office documents, ready for an assessor.</p></div>
+      <div class="card"><h3>report branding</h3><p>Apply your agency's logo and header/footer to the output. The protective marking stays on every page &mdash; a document obligation, not a style choice.</p></div>
+      <div class="card"><h3>honest coverage</h3><p>Controls you haven't answered are reported as <em>not assessed</em>, with the reason &mdash; never assumed compliant. An assessor can trust the gaps.</p></div>
+      <div class="card"><h3>any cloud</h3><p>Runs on Azure, AWS, or any host. One tool, one SSP, whichever cloud your system lives in.</p></div>
+    </div>
+  </section>
+
+  <!-- HOW IT RUNS -->
+  <section class="band">
+    <div class="wrap">
+      <p class="shead">// how it runs</p>
+      <h2 class="stitle">In your cloud. Read-only. Nothing leaves.</h2>
+      <div class="grid">
+        <div class="card runitem"><h3>read-only</h3><p>Reader on Azure, ReadOnlyAccess on AWS &mdash; and nothing more. Arjun reads configuration to assess it and changes nothing in your tenant.</p></div>
+        <div class="card runitem"><h3>no egress</h3><p>Your configuration and attestations stay in your own tenant. Nothing is sent to us, cached by us, or seen by us.</p></div>
+        <div class="card runitem"><h3>your cloud</h3><p>Installs into your own subscription or account. You own the deployment, the database, and every document it produces.</p></div>
+        <div class="card runitem"><h3>small footprint</h3><p>One container, one managed database, sign-in through your own identity provider. Approvable by a security architect in an afternoon.</p></div>
+      </div>
+      <p class="audit"><strong>Security audits welcome.</strong> Arjun runs inside your own tenant and holds read-only access &mdash; so don&rsquo;t take our word for it, audit it. The <a href="https://github.com/abhijitsghosh/arjun-deploy" target="_blank" rel="noreferrer">install templates and the exact permissions it requests</a> are public, and the <strong>full source code is available to security teams for review on request</strong>. Responsible disclosure and source-access requests &mdash; <a href="mailto:security@arjunsec.run">security@arjunsec.run</a>.</p>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="wrap">
+    <p class="shead">// the winrar model</p>
+    <h2 class="stitle">One price. Nothing gated.</h2>
+    <div class="price">
+      <div class="fig">$100<small>&nbsp;AUD / month &middot; on your honour</small></div>
+      <p>No feature gates. No licence keys. No nagware. Every feature &mdash; the questionnaire, the attestations, the SSP and Annex &mdash; is on for everyone, forever. If Arjun is useful to your agency, licence it. Government departments pay regardless.</p>
+      <a class="btn" href="mailto:licence@arjunsec.run">Licence enquiries</a>
+    </div>
+
+    <div class="fine">
+      <b>Use at your own risk.</b> Arjun is provided <b>as-is</b>, with no warranty of any kind &mdash;
+      the author is not responsible for any problems or costs arising from its use. It is an assessment
+      aid, not an accreditation: an IRAP assessment is conducted by an ASD-endorsed IRAP assessor, and
+      Arjun is neither endorsed by nor affiliated with the ASD or the Australian Government.
+    </div>
+  </section>
+
+  <footer>
+    <a href="https://github.com/abhijitsghosh/arjun-deploy" target="_blank" rel="noreferrer">install templates</a>&nbsp;&nbsp;&middot;&nbsp;&nbsp;<a href="mailto:security@arjunsec.run">security</a>&nbsp;&nbsp;&middot;&nbsp;&nbsp;<a href="mailto:licence@arjunsec.run">licence</a><br><br>
+    arjunsec.run &mdash; <span class="sig">assess</span>, attest, and prove it.
+  </footer>
+</main>
+
+<script>
+  (function () {
+    var canvas = document.getElementById('rain');
+    var ctx = canvas.getContext('2d');
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var glyphs = [];
+    (function () {
+      for (var c = 0x30A0; c < 0x3100; c++) glyphs.push(String.fromCharCode(c)); // katakana
+      glyphs = glyphs.concat('abcdefghijklmnopqrstuvwxyz0123456789$+=<>*/#%'.split(''));
+    })();
+    var w, h, cols, drops, fontSize;
+
+    function setup() {
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = window.innerWidth; h = window.innerHeight;
+      canvas.width = Math.floor(w * dpr); canvas.height = Math.floor(h * dpr);
+      canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      fontSize = w < 600 ? 13 : 16;
+      cols = Math.ceil(w / fontSize);
+      drops = new Array(cols);
+      for (var i = 0; i < cols; i++) drops[i] = Math.random() * -60;
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+    }
+
+    function frame() {
+      ctx.fillStyle = 'rgba(0,0,0,0.062)'; ctx.fillRect(0, 0, w, h);
+      ctx.font = fontSize + 'px ui-monospace, Menlo, Consolas, monospace';
+      for (var i = 0; i < cols; i++) {
+        var ch = glyphs[(Math.random() * glyphs.length) | 0];
+        var x = i * fontSize, y = drops[i] * fontSize;
+        ctx.fillStyle = Math.random() > 0.93 ? '#b8ffe8' : '#00e5a0';
+        ctx.fillText(ch, x, y);
+        if (y > h && Math.random() > 0.975) drops[i] = Math.random() * -20;
+        drops[i] += 1;
+      }
+    }
+
+    function staticField() {
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+      ctx.font = fontSize + 'px ui-monospace, Menlo, monospace';
+      for (var i = 0; i < cols; i++) {
+        var runs = 3 + ((Math.random() * 5) | 0);
+        var start = (Math.random() * (h / fontSize)) | 0;
+        for (var j = 0; j < runs; j++) {
+          ctx.globalAlpha = Math.max(0.08, 1 - j / runs);
+          ctx.fillStyle = j === 0 ? '#b8ffe8' : '#00e5a0';
+          ctx.fillText(glyphs[(Math.random() * glyphs.length) | 0], i * fontSize, (start - j) * fontSize);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    var last = 0, raf;
+    function loop(t) {
+      raf = requestAnimationFrame(loop);
+      if (t - last < 33) return;   // ~30fps
+      last = t; frame();
+    }
+    function start() {
+      setup();
+      if (reduce) { staticField(); return; }
+      cancelAnimationFrame(raf); last = 0; raf = requestAnimationFrame(loop);
+    }
+    var rt;
+    window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(start, 180); });
+    start();
+
+    document.querySelectorAll('[data-copy]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        navigator.clipboard.writeText(btn.getAttribute('data-copy')).then(function () {
+          var old = btn.textContent; btn.textContent = 'copied!';
+          setTimeout(function () { btn.textContent = old; }, 1500);
+        }).catch(function () {});
+      });
+    });
+  })();
+</script>
+</body>
+</html>
