@@ -155,6 +155,11 @@
     box-shadow: var(--glow); transition: filter .15s, transform .05s; }
   .btn:hover { filter: brightness(1.12); }
   .btn:active { transform: translateY(1px); }
+  .price-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 26px; }
+  .price-actions .btn { margin-top: 0; }
+  .btn.ghost { background: transparent; color: var(--green); border: 1px solid var(--edge-hi);
+    box-shadow: none; }
+  .btn.ghost:hover { color: var(--bright); border-color: var(--bright); filter: none; }
 
   .fine { margin-top: 40px; border: 1px dashed var(--edge); border-radius: 8px;
     background: rgba(0,0,0,0.4); padding: 16px 20px; color: var(--dim);
@@ -264,7 +269,10 @@
       <div class="fig">$100<small>&nbsp;AUD / month &middot; on your honour</small></div>
       <p>No feature gates. No licence keys. No nagware. Every feature &mdash; the questionnaire, the attestations, the SSP and Annex &mdash; is on for everyone, forever. If Arjun is useful to your agency, licence it.</p>
       <p>Your subscription keeps the ISM controls current: as ASD revises the ISM, updated releases carry the new catalog, and Arjun tells you in-app when one is available. Upgrading is one command and preserves your attestations.</p>
-      <a class="btn" href="mailto:licence@arjunsec.run">Licence enquiries</a>
+      <div class="price-actions">
+        <a class="btn" href="https://buy.stripe.com/bJeeVc3Hfco826ofLL7kc01" target="_blank" rel="noreferrer">Subscribe &mdash; $100/mo &rarr;</a>
+        <a class="btn ghost" href="mailto:licence@arjunsec.run">Licence enquiries</a>
+      </div>
     </div>
 
     <div class="fine">
