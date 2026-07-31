@@ -58,6 +58,19 @@
   .prompt { color: var(--dim); }
   .prompt b { color: var(--green); font-weight: 600; }
 
+  .topnav { position: relative; z-index: 4; display: flex; align-items: center; gap: 16px;
+    max-width: 1040px; margin: 0 auto; padding: 16px 24px; }
+  .topnav .mk { font-weight: 800; color: var(--bright); text-decoration: none;
+    letter-spacing: 2px; text-shadow: var(--glow); }
+  .topnav .links { margin-left: auto; display: flex; align-items: center; gap: 18px; font-size: 14px; }
+  .topnav .links a { color: var(--green); text-decoration: none; letter-spacing: 0.04em; }
+  .topnav .links a:hover { color: var(--bright); }
+  .topnav .links a.docs { color: var(--void); background: var(--rain); font-weight: 700;
+    padding: 7px 15px; border-radius: 6px; box-shadow: var(--glow); text-transform: uppercase;
+    font-size: 12.5px; letter-spacing: 0.08em; }
+  .topnav .links a.docs:hover { color: var(--void); filter: brightness(1.12); }
+  @media (max-width: 460px) { .topnav .links a.plain { display: none; } }
+
   .hero { padding-top: clamp(64px, 12vh, 140px); text-align: center; }
   .boot { display: inline-block; margin: 0 auto 26px; padding: 7px 14px;
     border: 1px solid var(--edge); background: var(--panel-2); border-radius: 4px;
@@ -166,6 +179,16 @@
 <main>
   <p class="sr-only">Arjun is a read-only ISM assessment tool that installs into your own Azure or AWS tenant and generates a System Security Plan and its Annex.</p>
 
+  <!-- TOP NAV -->
+  <nav class="topnav" aria-label="Primary">
+    <a class="mk" href="/">&gt;_ arjun</a>
+    <span class="links">
+      <a class="plain" href="#pricing">pricing</a>
+      <a class="plain" href="#run">how it runs</a>
+      <a class="docs" href="/docs.html">Docs &rarr;</a>
+    </span>
+  </nav>
+
   <!-- HERO -->
   <section class="hero wrap">
     <div class="boot">
@@ -219,7 +242,7 @@
   </section>
 
   <!-- HOW IT RUNS -->
-  <section class="band">
+  <section class="band" id="run">
     <div class="wrap">
       <p class="shead">// how it runs</p>
       <h2 class="stitle">In your cloud. Read-only. Nothing leaves.</h2>
@@ -234,7 +257,7 @@
   </section>
 
   <!-- PRICING -->
-  <section class="wrap">
+  <section class="wrap" id="pricing">
     <p class="shead">// the winrar model</p>
     <h2 class="stitle">One price. Nothing gated.</h2>
     <div class="price">
