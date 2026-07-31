@@ -69,6 +69,10 @@
   th,td{border:1px solid var(--edge);padding:8px 11px;text-align:left;vertical-align:top;}
   th{color:var(--green);text-transform:uppercase;letter-spacing:0.08em;font-size:12px;}
 
+  figure{margin:18px 0 6px;}
+  figure img{display:block;width:100%;max-width:100%;border:1px solid var(--edge-hi);border-radius:8px;
+    box-shadow:var(--glow);}
+  figcaption{margin-top:8px;font-size:12.5px;color:var(--dim);}
   .note{margin:14px 0;padding:12px 16px;border:1px solid var(--edge);border-left:3px solid var(--green);
     border-radius:6px;background:rgba(0,229,160,0.05);font-size:14px;}
   footer{border-top:1px solid var(--edge);padding:26px 0 44px;text-align:center;color:var(--dim);
@@ -149,6 +153,19 @@
         reported as <em>not assessed</em>, with the reason &mdash; never as compliant. Inherited controls
         are reported distinctly, citing the source and its assessment.</li>
     </ol>
+
+    <figure>
+      <img src="img/systems.png" alt="The system switcher, showing the current system and New/Edit controls" loading="lazy">
+      <figcaption>Assess several systems from one deployment &mdash; each keeps its own answers.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/inheritance-sources.png" alt="Editing a system's inheritance sources" loading="lazy">
+      <figcaption>Each system declares the sources it inherits controls from &mdash; a CSP's IRAP-assessed platform, or a parent system.</figcaption>
+    </figure>
+    <figure>
+      <img src="img/inherited-control.png" alt="An ISM control marked Inherited, citing its source" loading="lazy">
+      <figcaption>A control marked <em>Inherited</em> cites its source &mdash; reported distinctly in the SSP, the way an assessor expects.</figcaption>
+    </figure>
   </section>
 
   <section id="current">
@@ -157,6 +174,10 @@
       footer shows the running version and the ISM catalog it assesses against (e.g. <em>ISM June 2026</em>).
       The check runs <strong>in your browser</strong> against the public release feed; the app itself makes
       no outbound call, so the "sends nothing outside the tenant" promise holds.</p>
+    <figure>
+      <img src="img/update-banner.png" alt="The in-app update prompt showing a newer version is available" loading="lazy">
+      <figcaption>The in-app prompt when a newer release is available, with the running version and ISM release in the footer.</figcaption>
+    </figure>
     <p>Upgrading is one command per platform, <strong>image-only</strong> &mdash; your database, and the
       attestations in it, are untouched; the app runs its schema migrations on boot:</p>
     <pre><span class="p"># Azure — in Azure Cloud Shell</span>
