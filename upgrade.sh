@@ -18,8 +18,24 @@ set -euo pipefail
 RG="rg-arjun"
 APP="arjun-app"
 IMAGE_REPO="ghcr.io/abhijitsghosh/arjun"
-VERSION_URL="https://raw.githubusercontent.com/abhijitsghosh/arjun-deploy/main/version.json"
+# Version feed. The domain (arjunsec.run) is the single source of truth — served fresh (no-store),
+# and the one place the version is updated. The GitHub mirror is a fallback if the domain is
+# unreachable.
+VERSION_URLS=(
+  "https://arjunsec.run/version.json"
+  "https://raw.githubusercontent.com/abhijitsghosh/arjun-deploy/main/version.json"
+)
 TAG=""
+
+latest_version() {
+  local url body ver
+  for url in "${VERSION_URLS[@]}"; do
+    body="$(curl -fsSL "$url" 2>/dev/null)" || continue
+    ver="$(printf '%s' "$body" | (jq -r '.latest' 2>/dev/null || sed -n 's/.*"latest":"\([^"]*\)".*/\1/p'))"
+    [[ -n "$ver" && "$ver" != "null" ]] && { printf '%s' "$ver"; return 0; }
+  done
+  return 1
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,9 +51,9 @@ az account show >/dev/null 2>&1 || { echo "ERROR: not signed in. Run 'az login' 
 
 # Target version: explicit --image-tag, else the latest published.
 if [[ -z "$TAG" ]]; then
-  TAG="$(curl -sL "$VERSION_URL" | (jq -r '.latest' 2>/dev/null || sed -n 's/.*"latest":"\([^"]*\)".*/\1/p'))"
+  TAG="$(latest_version || true)"
 fi
-[[ -z "$TAG" || "$TAG" == "null" ]] && { echo "ERROR: couldn't determine the latest version."; exit 1; }
+[[ -z "$TAG" || "$TAG" == "null" ]] && { echo "ERROR: couldn't determine the latest version (tried the domain and the GitHub mirror)."; exit 1; }
 
 CURRENT="$(az containerapp show -g "$RG" -n "$APP" --query "properties.template.containers[0].image" -o tsv 2>/dev/null || true)"
 [[ -z "$CURRENT" ]] && { echo "ERROR: Arjun app '$APP' not found in resource group '$RG'. Is it installed?"; exit 1; }
